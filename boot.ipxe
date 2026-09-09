@@ -1,0 +1,39 @@
+#!ipxe
+# ============================================================================
+#               OMNIMESH FLEET CORE: BARE-METAL iPXE BOOT CONDUIT           
+# ============================================================================
+# PROTOCOL   : iPXE Extensible Preboot Execution Environment
+# WORKSPACE  : Volatile Hardware RAM Storage Matrix (No Local Disk Footprint)
+# INVARIANT  : Ingress Network State Routing over HTTPS HTTP Core
+# SECURITY   : Isolated Memory Staging with Absolute Zero Local Write Footprint
+# ============================================================================
+
+echo 🛡️ [THE OMNIMESH CORE INGRESS INITIALIZED]: Initializing hardware telemetry...
+
+:dhcp_handshake
+dhcp || goto retry_dhcp
+
+:network_routing
+echo 📡 [NETWORK ONLINE]: Hardware Ingress Node IP: ${net0/ip}
+echo 📡 [ROUTING CONDUIT]: Querying cloud infrastructure endpoint via Port 443...
+
+# Define the secure remote cloud orchestration host containing boot configurations
+set cloud_kernel_host https://sovereign-fleet.io
+
+# Stage the wimboot environment and critical Windows PE micro-kernel files into memory
+kernel ${cloud_kernel_host}/wimboot
+initrd ${cloud_kernel_host}/BCD          BCD
+initrd ${cloud_kernel_host}/boot.sdi     boot.sdi
+initrd ${cloud_kernel_host}/boot.wim     boot.wim
+
+echo ⚡ [RAMSTAGE FLASHING]: Streaming isolated deployment environment to volatile memory...
+boot || goto boot_failure
+
+:retry_dhcp
+echo ⚠️ [NETWORK IMPEDANCE]: DHCP handshake timeout. Retrying loop circuit...
+sleep 5
+goto dhcp_handshake
+
+:boot_failure
+echo ❌ [CRITICAL COMPILER ERROR]: Hardware preboot transmission failed. Dropping ports.
+shell
