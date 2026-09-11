@@ -1,89 +1,72 @@
-/**
- * ============================================================================
- *               OMNIMESH HARDENED SYSTEM CORE PLATFORM v3.0           
- * ============================================================================
- * ARCHITECTURE : Shared-Nothing Zero-Trust Micro-Modular Edge Router
- * ENGINE LAYER : Native Node.js HTTP/Crypto Infrastructure Substrate
- * SECURITY     : Isolated In-Memory Enclaving with Zero Persistent Logging
- * PAYLOAD LAW  : 500-Byte Invariant Allocation Cryptographic State Matrix
- * ============================================================================
- */
-
 const http = require('http');
 const crypto = require('crypto');
 
-const GATE_CONFIG = {
+const CONFIG = {
     PORT: process.env.PORT || 4000,
-    INGRESS_PATH: "/api/v4/omnimesh/ingress",
-    SOVEREIGN_KEY_HASH: crypto.createHash('sha256').update("SOVEREIGN_CONTRACT_VALIDATION_TOKEN").digest('hex'),
-    SESSION_EXPIRATION_MS: 3600000 // Automated memory purge loop hourly
+    PATH: "/api/v4/omnimesh/ingress",
+    KEY_HASH: crypto.createHash('sha256').update("SOVEREIGN_CONTRACT_VALIDATION_TOKEN").digest('hex'),
+    TTL_MS: 3600000 
 };
 
-const secureEnclaveRegistry = new Map();
+const registry = new Map();
 
-function compactTransactionPayload(senderNodeId, dataBodyString) {
-    const rawStateFrame = {
-        session_id: crypto.randomBytes(16).toString('hex'),
-        node: senderNodeId,
-        invariant_state: "SUPERCONDUCTOR_REST_STATE",
-        data_hash: crypto.createHash('md5').update(dataBodyString).digest('hex'),
-        timestamp: Date.now()
-    };
-    return Buffer.from(JSON.stringify(rawStateFrame)).toString('base64');
+function pack(nodeId, data) {
+    return Buffer.from(JSON.stringify({
+        id: crypto.randomBytes(16).toString('hex'),
+        node: nodeId,
+        hash: crypto.createHash('md5').update(data).digest('hex'),
+        ts: Date.now()
+    })).toString('base64');
 }
 
 const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    const contextUrl = new URL(req.url, `http://${req.headers.host}`);
     
-    const outboundTokenHeader = req.headers['x-omnimesh-auth-token'];
-    const computedRequestHash = crypto.createHash('sha256').update(outboundTokenHeader || '').digest('hex');
+    const u = new URL(req.url, `http://${req.headers.host}`);
+    const token = req.headers['x-omnimesh-auth-token'];
+    const h = crypto.createHash('sha256').update(token || '').digest('hex');
 
-    if (contextUrl.pathname === GATE_CONFIG.INGRESS_PATH && req.method === 'POST') {
-        // Cryptographic Kill-Switch Check
-        if (computedRequestHash !== GATE_CONFIG.SOVEREIGN_KEY_HASH) {
+    if (u.pathname === CONFIG.PATH && req.method === 'POST') {
+        if (h !== CONFIG.KEY_HASH) {
             res.writeHead(401);
-            return res.end(JSON.stringify({ error: "UNAUTHORIZED_PERIMETER_HANDSHAKE" }));
+            return res.end(JSON.stringify({ error: "AUTH_DENIED" }));
         }
 
-        let payloadBufferChunks = '';
-        req.on('data', chunk => { payloadBufferChunks += chunk; });
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
             try {
-                const parsedJSONPayload = JSON.parse(payloadBufferChunks);
-                const sourceClientNode = parsedJSONPayload?.client_id;
-                const intentCommandPayload = parsedJSONPayload?.command_body?.trim();
+                const payload = JSON.parse(body);
+                const client = payload?.client_id;
+                const cmd = payload?.command_body?.trim();
 
-                if (!sourceClientNode || !intentCommandPayload) {
+                if (!client || !cmd) {
                     res.writeHead(400);
-                    return res.end(JSON.stringify({ error: "MALFORMED_INGRESS_DATA_FRAME" }));
+                    return res.end(JSON.stringify({ error: "BAD_FRAME" }));
                 }
 
-                const structuredCompressedFrame = compactTransactionPayload(sourceClientNode, intentCommandPayload);
-
-                // Zero-Trust RAM Enclaving (Bypasses hard drive logging completely)
-                secureEnclaveRegistry.set(sourceClientNode, {
-                    compaction_seal: structuredCompressedFrame,
-                    status: "EQUILIBRIUM_LOCKED",
-                    allocated_bytes: Buffer.byteLength(structuredCompressedFrame)
+                const seal = pack(client, cmd);
+                registry.set(client, {
+                    seal: seal,
+                    status: "LOCKED",
+                    sz: Buffer.byteLength(seal)
                 });
 
                 res.writeHead(200);
-                res.end(JSON.stringify({ status: "PROCESSED_BY_OMNIMESH_ENGINE", load: "500B" }));
-                payloadBufferChunks = null;
-
+                res.end(JSON.stringify({ status: "PROCESSED", load: "500B" }));
+                body = null;
             } catch (err) {
                 res.writeHead(500);
-                res.end(JSON.stringify({ error: "INTERNAL_CORE_EXCEPTION_INTERCEPTED" }));
+                res.end(JSON.stringify({ error: "ERR_CORE" }));
             }
         });
     } else {
         res.writeHead(404);
-        res.end(JSON.stringify({ error: "ROUTE_NOT_FOUND_ON_HARDWARE_GRID" }));
+        res.end(JSON.stringify({ error: "NOT_FOUND" }));
     }
 });
 
-setInterval(() => { secureEnclaveRegistry.clear(); }, GATE_CONFIG.SESSION_EXPIRATION_MS);
+setInterval(() => { registry.clear(); }, CONFIG.TTL_MS);
 
-server.listen(GATE_CONFIG.PORT, '::');
+server.listen(CONFIG.PORT, '::');
