@@ -1,39 +1,32 @@
 #!ipxe
-# ============================================================================
-#               OMNIMESH FLEET CORE: BARE-METAL iPXE BOOT CONDUIT           
-# ============================================================================
-# PROTOCOL   : iPXE Extensible Preboot Execution Environment
-# WORKSPACE  : Volatile Hardware RAM Storage Matrix (No Local Disk Footprint)
-# INVARIANT  : Ingress Network State Routing over HTTPS HTTP Core
-# SECURITY   : Isolated Memory Staging with Absolute Zero Local Write Footprint
-# ============================================================================
 
-echo 🛡️ [THE OMNIMESH CORE INGRESS INITIALIZED]: Initializing hardware telemetry...
+# iPXE Network Boot Configuration Matrix
+# Target Environment: Volatile Hardware RAM Storage
 
-:dhcp_handshake
-dhcp || goto retry_dhcp
+echo [INIT]: Initializing network interface telemetry...
 
-:network_routing
-echo 📡 [NETWORK ONLINE]: Hardware Ingress Node IP: ${net0/ip}
-echo 📡 [ROUTING CONDUIT]: Querying cloud infrastructure endpoint via Port 443...
+:dhcp_loop
+dhcp || goto retry
 
-# Define the secure remote cloud orchestration host containing boot configurations
-set cloud_kernel_host https://sovereign-fleet.io
+:boot_stage
+echo [NET]: Node IP configuration assigned: ${net0/ip}
+echo [NET]: Fetching wimboot components from cloud orchestration layer...
 
-# Stage the wimboot environment and critical Windows PE micro-kernel files into memory
-kernel ${cloud_kernel_host}/wimboot
-initrd ${cloud_kernel_host}/BCD          BCD
-initrd ${cloud_kernel_host}/boot.sdi     boot.sdi
-initrd ${cloud_kernel_host}/boot.wim     boot.wim
+set cloud_host https://sovereign-fleet.io
 
-echo ⚡ [RAMSTAGE FLASHING]: Streaming isolated deployment environment to volatile memory...
-boot || goto boot_failure
+kernel ${cloud_host}/wimboot
+initrd ${cloud_host}/BCD          BCD
+initrd ${cloud_host}/boot.sdi     boot.sdi
+initrd ${cloud_host}/boot.wim     boot.wim
 
-:retry_dhcp
-echo ⚠️ [NETWORK IMPEDANCE]: DHCP handshake timeout. Retrying loop circuit...
+echo [RAMSTAGE]: Executing boot initialization loop...
+boot || goto fail
+
+:retry
+echo [WARN]: DHCP handshake timeout occurred. Re-entering loop circuit...
 sleep 5
-goto dhcp_handshake
+goto dhcp_loop
 
-:boot_failure
-echo ❌ [CRITICAL COMPILER ERROR]: Hardware preboot transmission failed. Dropping ports.
+:fail
+echo [ERR]: Preboot deployment transmission failed. Dropping connection to shell.
 shell
