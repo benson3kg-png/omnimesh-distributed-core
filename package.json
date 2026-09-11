@@ -1,17 +1,15 @@
 {
-  "name": "omnimesh-standalone",
+  "name": "omnimesh-core",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "main": "mesh_node.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node mesh_node.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "fastify": "^5.12.1",
-    "ws": "^8.21.3"
+    "ws": "^8.18.0"
   }
 }
